@@ -1,0 +1,218 @@
+#!/bin/bash
+
+# Nhập danh sách khối bộ nhớ
+read -p "Nhập số lượng khối bộ nhớ: " n
+mem_blocks=()
+echo "Nhập kích thước từng khối bộ nhớ:"
+for ((i = 0; i < n; i++)); do
+    read -p "Khối $((i + 1)): " size
+    mem_blocks+=($size)
+done
+
+# Nhập danh sách tiến trình
+read -p "Nhập số lượng tiến trình: " m
+processes=()
+echo "Nhập yêu cầu bộ nhớ từng tiến trình:"
+for ((i = 0; i < m; i++)); do
+    read -p "Tiến trình $((i + 1)): " req
+    processes+=($req)
+done
+
+# --- First Fit ---
+echo -e "\nKết quả phân bổ theo First Fit:"
+first_fit() {
+    local mem=("${mem_blocks[@]}")
+    for ((i = 0; i < ${#processes[@]}; i++)); do
+        allocated=0
+        for ((j = 0; j < ${#mem[@]}; j++)); do
+            if [ ${mem[j]} -ge ${processes[i]} ]; then
+                echo "Tiến trình ${processes[i]} -> Khối ${mem[j]}"
+                mem[j]=$((mem[j] - processes[i]))
+                allocated=1
+                break
+            fi
+        done
+        [ $allocated -eq 0 ] && echo "Tiến trình ${processes[i]} -> Không được cấp phát"
+    done
+}
+
+
+# --- Best Fit ---
+echo -e "\nKết quả phân bổ theo Best Fit:"
+best_fit() {
+    local mem=("${mem_blocks[@]}")
+    for ((i = 0; i < ${#processes[@]}; i++)); do
+        best=-1
+        for ((j = 0; j < ${#mem[@]}; j++)); do
+            if [ ${mem[j]} -ge ${processes[i]} ]; then
+                if [ $best -eq -1 ] || [ ${mem[j]} -lt ${mem[best]} ]; then
+                    best=$j
+                fi
+            fi
+        done
+        if [ $best -ne -1 ]; then
+            echo "Tiến trình ${processes[i]} -> Khối ${mem[best]}"
+            mem[best]=$((mem[best] - processes[i]))
+        else
+            echo "Tiến trình ${processes[i]} -> Không được cấp phát"
+        fi
+    done
+}
+
+
+# --- Worst Fit ---
+echo -e "\nKết quả phân bổ theo Worst Fit:"
+worst_fit() {
+    local mem=("${mem_blocks[@]}")
+    for ((i = 0; i < ${#processes[@]}; i++)); do
+        worst=-1
+        for ((j = 0; j < ${#mem[@]}; j++)); do
+            if [ ${mem[j]} -ge ${processes[i]} ]; then
+                if [ $worst -eq -1 ] || [ ${mem[j]} -gt ${mem[worst]} ]; then
+                    worst=$j
+                fi
+            fi
+        done
+        if [ $worst -ne -1 ]; then
+            echo "Tiến trình ${processes[i]} -> Khối ${mem[worst]}"
+            mem[worst]=$((mem[worst] - processes[i]))
+        else
+            echo "Tiến trình ${processes[i]} -> Không được cấp phát"
+        fi
+    done
+}
+
+
+
+
+
+#!/bin/bash
+
+# Nhập thông tin cơ bản
+read -p "Nhập kích thước trang (bytes): " PAGE_SIZE
+read -p "Nhập số lượng trang: " NUM_PAGES
+
+# Nhập bảng trang
+declare -a PAGE_TABLE
+echo "Nhập bảng trang (mỗi dòng là frame tương ứng với trang i):"
+for ((i=0; i<NUM_PAGES; i++)); do
+    read -p "Page $i → Frame: " FRAME
+    PAGE_TABLE[$i]=$FRAME
+done
+
+# Hiển thị bảng trang đã nhập
+echo
+echo " Bảng trang:"
+for ((i=0; i<NUM_PAGES; i++)); do
+    echo "Page $i → Frame ${PAGE_TABLE[$i]}"
+done
+
+# Chọn chế độ chuyển đổi
+echo
+echo "Bạn muốn chuyển đổi loại nào?"
+echo "1. Địa chỉ logic → vật lý"
+echo "2. Địa chỉ vật lý → logic (giả lập đơn giản)"
+read -p "Lựa chọn (1 hoặc 2): " CHOICE
+
+case $CHOICE in
+    1)
+        MAX_ADDR=$(( NUM_PAGES * PAGE_SIZE - 1 ))
+        read -p "Nhập địa chỉ logic (0 - $MAX_ADDR): " LOGIC_ADDR
+        if [ "$LOGIC_ADDR" -ge $((NUM_PAGES * PAGE_SIZE)) ]; then
+            echo " Địa chỉ logic vượt quá không gian!"
+            exit 1
+        fi
+        PAGE_NUM=$(( LOGIC_ADDR / PAGE_SIZE ))
+        OFFSET=$(( LOGIC_ADDR % PAGE_SIZE ))
+        FRAME_NUM=${PAGE_TABLE[$PAGE_NUM]}
+        PHYS_ADDR=$(( FRAME_NUM * PAGE_SIZE + OFFSET ))
+        echo
+        echo "Phân tích địa chỉ logic $LOGIC_ADDR:"
+        echo " → Trang: $PAGE_NUM"
+        echo " → Offset: $OFFSET"
+        echo " → Trang $PAGE_NUM ánh xạ đến Frame $FRAME_NUM"
+        echo " → Địa chỉ vật lý tương ứng: $PHYS_ADDR"
+        ;;
+    2)
+        read -p "Nhập địa chỉ vật lý: " PHYS_ADDR
+        FRAME_NUM=$(( PHYS_ADDR / PAGE_SIZE ))
+        OFFSET=$(( PHYS_ADDR % PAGE_SIZE ))
+
+        # Tìm trang ứng với frame (nếu có)
+        PAGE_NUM=-1
+        for ((i=0; i<NUM_PAGES; i++)); do
+            if [ "${PAGE_TABLE[$i]}" -eq "$FRAME_NUM" ]; then
+                PAGE_NUM=$i
+                break
+            fi
+        done
+
+        if [ "$PAGE_NUM" -eq -1 ]; then
+            echo " Không tìm thấy trang nào ánh xạ đến frame $FRAME_NUM"
+            exit 1
+        fi
+
+        LOGIC_ADDR=$(( PAGE_NUM * PAGE_SIZE + OFFSET ))
+        echo
+        echo " Phân tích địa chỉ vật lý $PHYS_ADDR:"
+        echo " → Frame: $FRAME_NUM"
+        echo " → Offset: $OFFSET"
+        echo " → Frame $FRAME_NUM thuộc về Trang $PAGE_NUM"
+        echo " → Địa chỉ logic tương ứng: $LOGIC_ADDR"
+        ;;
+    *)
+        echo " Lựa chọn không hợp lệ!"
+        ;;
+esac
+
+
+
+
+
+#!/bin/bash
+
+# Nhập số lượng đoạn
+read -p "Nhập số lượng đoạn: " NUM_SEGMENTS
+
+# Nhập bảng phân đoạn: base và limit
+declare -a BASE
+declare -a LIMIT
+
+echo "Nhập bảng phân đoạn (Limit và Base):"
+for ((i=0; i<NUM_SEGMENTS; i++)); do
+    read -p "Đoạn $i - Limit: " LIMIT[$i]
+    read -p "Đoạn $i - Base: " BASE[$i]
+done
+
+# Hiển thị bảng phân đoạn
+echo
+echo "Bảng phân đoạn:"
+for ((i=0; i<NUM_SEGMENTS; i++)); do
+    echo "Segment $i: Limit = ${LIMIT[$i]}, Base = ${BASE[$i]}"
+done
+
+# Nhập địa chỉ logic
+read -p "Nhập địa chỉ logic theo dạng segment:offset (VD: 0:430): " INPUT
+SEGMENT=$(echo $INPUT | cut -d':' -f1)
+OFFSET=$(echo $INPUT | cut -d':' -f2)
+
+# Kiểm tra hợp lệ
+if [ "$SEGMENT" -ge "$NUM_SEGMENTS" ]; then
+    echo " Segment không tồn tại!"
+    exit 1
+fi
+
+if [ "$OFFSET" -ge "${LIMIT[$SEGMENT]}" ]; then
+    echo " Offset vượt quá giới hạn đoạn (limit = ${LIMIT[$SEGMENT]})!"
+    exit 1
+fi
+
+# Tính địa chỉ vật lý
+PHYS_ADDR=$(( ${BASE[$SEGMENT]} + OFFSET ))
+
+echo
+echo " Kết quả:"
+echo " → Segment: $SEGMENT"
+echo " → Offset: $OFFSET"
+echo " → Base = ${BASE[$SEGMENT]}"
+echo " → Địa chỉ vật lý = ${BASE[$SEGMENT]} + $OFFSET = $PHYS_ADDR"
