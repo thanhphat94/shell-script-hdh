@@ -28,140 +28,180 @@ processes=()
 # Khởi tạo mảng rỗng processes để lưu yêu cầu bộ nhớ của các tiến trình
 
 echo "Nhập yêu cầu bộ nhớ từng tiến trình:"
-# In thông báo yêu cầu nhập yêu
+# In thông báo yêu cầu nhập yêu cầu bộ nhớ từng tiến trình
 
-
-
-
-
-
-#!/bin/bash
-
-# Nhập thông tin cơ bản
-read -p "Nhập kích thước trang (bytes): " PAGE_SIZE
-read -p "Nhập số lượng trang: " NUM_PAGES
-
-# Nhập bảng trang
-declare -a PAGE_TABLE
-echo "Nhập bảng trang (mỗi dòng là frame tương ứng với trang i):"
-for ((i=0; i<NUM_PAGES; i++)); do
-    read -p "Page $i → Frame: " FRAME
-    PAGE_TABLE[$i]=$FRAME
+for ((i = 0; i < m; i++)); do
+    # Vòng lặp chạy m lần để nhập yêu cầu bộ nhớ cho từng tiến trình
+    read -p "Tiến trình $((i + 1)): " req
+    # Yêu cầu nhập yêu cầu bộ nhớ cho tiến trình thứ i+1 và lưu vào biến req
+    processes+=($req)
+    # Thêm yêu cầu bộ nhớ vào mảng processes
 done
+# Kết thúc vòng lặp nhập tiến trình
 
-# Hiển thị bảng trang đã nhập
-echo
-echo " Bảng trang:"
-for ((i=0; i<NUM_PAGES; i++)); do
-    echo "Page $i → Frame ${PAGE_TABLE[$i]}"
-done
-
-# Chọn chế độ chuyển đổi
-echo
-echo "Bạn muốn chuyển đổi loại nào?"
-echo "1. Địa chỉ logic → vật lý"
-echo "2. Địa chỉ vật lý → logic (giả lập đơn giản)"
-read -p "Lựa chọn (1 hoặc 2): " CHOICE
-
-case $CHOICE in
-    1)
-        MAX_ADDR=$(( NUM_PAGES * PAGE_SIZE - 1 ))
-        read -p "Nhập địa chỉ logic (0 - $MAX_ADDR): " LOGIC_ADDR
-        if [ "$LOGIC_ADDR" -ge $((NUM_PAGES * PAGE_SIZE)) ]; then
-            echo " Địa chỉ logic vượt quá không gian!"
-            exit 1
+# Hàm hiển thị trạng thái bộ nhớ
+show_memory() {
+    local mem=("${@}")
+    echo -n "Trạng thái bộ nhớ: ["
+    for ((k = 0; k < ${#mem[@]}; k++)); do
+        echo -n "${mem[k]}"
+        if [ $k -lt $((${#mem[@]} - 1)) ]; then
+            echo -n ", "
         fi
-        PAGE_NUM=$(( LOGIC_ADDR / PAGE_SIZE ))
-        OFFSET=$(( LOGIC_ADDR % PAGE_SIZE ))
-        FRAME_NUM=${PAGE_TABLE[$PAGE_NUM]}
-        PHYS_ADDR=$(( FRAME_NUM * PAGE_SIZE + OFFSET ))
-        echo
-        echo "Phân tích địa chỉ logic $LOGIC_ADDR:"
-        echo " → Trang: $PAGE_NUM"
-        echo " → Offset: $OFFSET"
-        echo " → Trang $PAGE_NUM ánh xạ đến Frame $FRAME_NUM"
-        echo " → Địa chỉ vật lý tương ứng: $PHYS_ADDR"
-        ;;
-    2)
-        read -p "Nhập địa chỉ vật lý: " PHYS_ADDR
-        FRAME_NUM=$(( PHYS_ADDR / PAGE_SIZE ))
-        OFFSET=$(( PHYS_ADDR % PAGE_SIZE ))
+    done
+    echo "]"
+}
 
-        # Tìm trang ứng với frame (nếu có)
-        PAGE_NUM=-1
-        for ((i=0; i<NUM_PAGES; i++)); do
-            if [ "${PAGE_TABLE[$i]}" -eq "$FRAME_NUM" ]; then
-                PAGE_NUM=$i
-                break
+# --- First Fit ---
+first_fit() {
+    # Định nghĩa hàm first_fit cho thuật toán First Fit
+    echo -e "\n=== Kết quả phân bổ theo First Fit ==="
+    # In tiêu đề cho thuật toán First Fit, thêm dấu phân cách
+    local mem=("${mem_blocks[@]}")
+    # Tạo bản sao mảng mem_blocks để không ảnh hưởng dữ liệu gốc
+    local allocated_count=0
+    # Biến đếm số tiến trình được cấp phát
+    echo "Bộ nhớ ban đầu: ${mem[*]}"
+    # In trạng thái bộ nhớ ban đầu
+    for ((i = 0; i < ${#processes[@]}; i++)); do
+        # Vòng lặp duyệt qua từng tiến trình trong mảng processes
+        allocated=0 # để kiểm tra xem bộ nhớ đã được cấp phát chưa
+        # Khởi tạo biến allocated bằng 0 (0: chưa cấp, 1: đã cấp)
+        for ((j = 0; j < ${#mem[@]}; j++)); do
+            # Vòng lặp duyệt qua từng khối bộ nhớ trong mảng mem
+            if [ ${mem[j]} -ge ${processes[i]} ]; then #-ge nghĩa là >=
+                # Kiểm tra nếu kích thước khối lớn hơn hoặc bằng yêu cầu tiến trình
+                echo "Tiến trình ${processes[i]} -> Khối ${mem[j]}"
+                # In thông báo tiến trình được cấp phát vào khối
+                mem[j]=$((mem[j] - processes[i]))
+                # Giảm kích thước khối đi bằng yêu cầu của tiến trình
+                allocated=1
+                # Đặt allocated=1 để chỉ ra tiến trình đã được cấp phát
+                allocated_count=$((allocated_count + 1))
+                # Tăng số tiến trình được cấp phát
+                show_memory "${mem[@]}"
+                # Hiển thị trạng thái bộ nhớ sau khi cấp phát
+                break #thoát ra vòng lặp
+                # Thoát khỏi vòng lặp khối vì đã tìm thấy khối phù hợp
+            fi #kết thúc if
+            # Kết thúc câu lệnh if
+        done #kết thúc vòng for
+        # Kết thúc vòng lặp duyệt khối bộ nhớ
+        [ $allocated -eq 0 ] && echo "Tiến trình ${processes[i]} -> Không được cấp phát" #-eq là =
+        # Nếu allocated=0 (chưa cấp phát), in thông báo không cấp được
+    done
+    # Kết thúc vòng lặp duyệt tiến trình
+    echo "Tóm tắt: $allocated_count/${#processes[@]} tiến trình được cấp phát."
+    # In tóm tắt số tiến trình được cấp phát
+}
+# Kết thúc hàm first_fit
+
+# --- Best Fit ---
+best_fit() {
+    # Định nghĩa hàm best_fit cho thuật toán Best Fit
+    echo -e "\n=== Kết quả phân bổ theo Best Fit ==="
+    # In tiêu đề cho thuật toán Best Fit
+    local mem=("${mem_blocks[@]}")
+    # Tạo bản sao mảng mem_blocks
+    local allocated_count=0
+    # Biến đếm số tiến trình được cấp phát
+    echo "Bộ nhớ ban đầu: ${mem[*]}"
+    # In trạng thái bộ nhớ ban đầu
+    for ((i = 0; i < ${#processes[@]}; i++)); do
+        # Vòng lặp duyệt từng tiến trình
+        best=-1 # -1 nghĩa là chưa tìm ra khối phù hợp
+        # Khởi tạo best=-1, chỉ ra chưa tìm thấy khối phù hợp
+        for ((j = 0; j < ${#mem[@]}; j++)); do
+            # Vòng lặp duyệt từng khối bộ nhớ
+            if [ ${mem[j]} -ge ${processes[i]} ]; then
+                # Kiểm tra nếu khối đủ lớn cho tiến trình
+                if [ $best -eq -1 ] || [ ${mem[j]} -lt ${mem[best]} ]; then  #Kiểm tra xem đây là khối đầu tiên đủ lớn (best == -1) hoặc khối hiện tại nhỏ hơn khối tốt nhất trước đó (mem[j] < mem[best]). -lt: Toán tử “nhỏ hơn”.
+                    # Nếu đây là khối đầu tiên đủ lớn hoặc nhỏ hơn khối tốt nhất trước đó
+                    best=$j
+                    # Cập nhật best thành chỉ số khối hiện tại
+                fi
+                # Kết thúc câu lệnh if kiểm tra khối nhỏ nhất
             fi
+            # Kết thúc câu lệnh if kiểm tra khối đủ lớn
         done
-
-        if [ "$PAGE_NUM" -eq -1 ]; then
-            echo " Không tìm thấy trang nào ánh xạ đến frame $FRAME_NUM"
-            exit 1
+        # Kết thúc vòng lặp duyệt khối bộ nhớ
+        if [ $best -ne -1 ]; then # -ne là !=
+            # Nếu tìm thấy khối phù hợp (best != -1)
+            echo "Tiến trình ${processes[i]} -> Khối ${mem[best]}"
+            # In thông báo tiến trình được cấp phát vào khối nhỏ nhất
+            mem[best]=$((mem[best] - processes[i]))
+            # Giảm kích thước khối đi bằng yêu cầu của tiến trình
+            allocated_count=$((allocated_count + 1))
+            # Tăng số tiến trình được cấp phát
+            show_memory "${mem[@]}"
+            # Hiển thị trạng thái bộ nhớ sau khi cấp phát
+        else
+            # Nếu không tìm thấy khối phù hợp
+            echo "Tiến trình ${processes[i]} -> Không được cấp phát"
+            # In thông báo không cấp phát được
         fi
+        # Kết thúc câu lệnh if kiểm tra best
+    done
+    # Kết thúc vòng lặp duyệt tiến trình
+    echo "Tóm tắt: $allocated_count/${#processes[@]} tiến trình được cấp phát."
+    # In tóm tắt số tiến trình được cấp phát
+}
+# Kết thúc hàm best_fit
 
-        LOGIC_ADDR=$(( PAGE_NUM * PAGE_SIZE + OFFSET ))
-        echo
-        echo " Phân tích địa chỉ vật lý $PHYS_ADDR:"
-        echo " → Frame: $FRAME_NUM"
-        echo " → Offset: $OFFSET"
-        echo " → Frame $FRAME_NUM thuộc về Trang $PAGE_NUM"
-        echo " → Địa chỉ logic tương ứng: $LOGIC_ADDR"
-        ;;
-    *)
-        echo " Lựa chọn không hợp lệ!"
-        ;;
-esac
+# --- Worst Fit ---
+worst_fit() {
+    # Định nghĩa hàm worst_fit cho thuật toán Worst Fit
+    echo -e "\n=== Kết quả phân bổ theo Worst Fit ==="
+    # In tiêu đề cho thuật toán Worst Fit
+    local mem=("${mem_blocks[@]}")
+    # Tạo bản sao mảng mem_blocks
+    local allocated_count=0
+    # Biến đếm số tiến trình được cấp phát
+    echo "Bộ nhớ ban đầu: ${mem[*]}"
+    # In trạng thái bộ nhớ ban đầu
+    for ((i = 0; i < ${#processes[@]}; i++)); do
+        # Vòng lặp duyệt từng tiến trình
+        worst=-1
+        # Khởi tạo worst=-1, chỉ ra chưa tìm thấy khối phù hợp
+        for ((j = 0; j < ${#mem[@]}; j++)); do
+            # Vòng lặp duyệt từng khối bộ nhớ
+            if [ ${mem[j]} -ge ${processes[i]} ]; then
+                # Kiểm tra nếu khối đủ lớn cho tiến trình
+                if [ $worst -eq -1 ] || [ ${mem[j]} -gt ${mem[worst]} ]; then #gt toán tử lớn hơn
+                    # Nếu đây là khối đầu tiên đủ lớn hoặc lớn hơn khối lớn nhất trước đó
+                    worst=$j
+                    # Cập nhật worst thành chỉ số khối hiện tại
+                fi
+                # Kết thúc câu lệnh if kiểm tra khối lớn nhất
+            fi
+            # Kết thúc câu lệnh if kiểm tra khối đủ lớn
+        done
+        # Kết thúc vòng lặp duyệt khối bộ nhớ
+        if [ $worst -ne -1 ]; then
+            # Nếu tìm thấy khối phù hợp (worst != -1)
+            echo "Tiến trình ${processes[i]} -> Khối ${mem[worst]}"
+            # In thông báo tiến trình được cấp phát vào khối lớn nhất
+            mem[worst]=$((mem[worst] - processes[i]))
+            # Giảm kích thước khối đi bằng yêu cầu của tiến trình
+            allocated_count=$((allocated_count + 1))
+            # Tăng số tiến trình được cấp phát
+            show_memory "${mem[@]}"
+            # Hiển thị trạng thái bộ nhớ sau khi cấp phát
+        else
+            # Nếu không tìm thấy khối phù hợp
+            echo "Tiến trình ${processes[i]} -> Không được cấp phát"
+            # In thông báo không cấp phát được
+        fi
+        # Kết thúc câu lệnh if kiểm tra worst
+    done
+    # Kết thúc vòng lặp duyệt tiến trình
+    echo "Tóm tắt: $allocated_count/${#processes[@]} tiến trình được cấp phát."
+    # In tóm tắt số tiến trình được cấp phát
+}
+# Kết thúc hàm worst_fit
 
-
-
-
-
-#!/bin/bash
-
-# Nhập số lượng đoạn
-read -p "Nhập số lượng đoạn: " NUM_SEGMENTS
-
-# Nhập bảng phân đoạn: base và limit
-declare -a BASE
-declare -a LIMIT
-
-echo "Nhập bảng phân đoạn (Limit và Base):"
-for ((i=0; i<NUM_SEGMENTS; i++)); do
-    read -p "Đoạn $i - Limit: " LIMIT[$i]
-    read -p "Đoạn $i - Base: " BASE[$i]
-done
-
-# Hiển thị bảng phân đoạn
-echo
-echo "Bảng phân đoạn:"
-for ((i=0; i<NUM_SEGMENTS; i++)); do
-    echo "Segment $i: Limit = ${LIMIT[$i]}, Base = ${BASE[$i]}"
-done
-
-# Nhập địa chỉ logic
-read -p "Nhập địa chỉ logic theo dạng segment:offset (VD: 0:430): " INPUT
-SEGMENT=$(echo $INPUT | cut -d':' -f1)
-OFFSET=$(echo $INPUT | cut -d':' -f2)
-
-# Kiểm tra hợp lệ
-if [ "$SEGMENT" -ge "$NUM_SEGMENTS" ]; then
-    echo " Segment không tồn tại!"
-    exit 1
-fi
-
-if [ "$OFFSET" -ge "${LIMIT[$SEGMENT]}" ]; then
-    echo " Offset vượt quá giới hạn đoạn (limit = ${LIMIT[$SEGMENT]})!"
-    exit 1
-fi
-
-# Tính địa chỉ vật lý
-PHYS_ADDR=$(( ${BASE[$SEGMENT]} + OFFSET ))
-
-echo
-echo " Kết quả:"
-echo " → Segment: $SEGMENT"
-echo " → Offset: $OFFSET"
-echo " → Base = ${BASE[$SEGMENT]}"
-echo " → Địa chỉ vật lý = ${BASE[$SEGMENT]} + $OFFSET = $PHYS_ADDR"
+# Gọi các hàm để chạy thuật toán
+first_fit
+best_fit
+worst_fit
+# Thực thi lần lượt các thuật toán
