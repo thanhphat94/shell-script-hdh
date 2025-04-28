@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Nhập thông tin cơ bản
+read -p "Nhập kích thước trang (bytes): " PAGE_SIZE
+read -p "Nhập số lượng trang: " NUM_PAGES
+
+# Nhập bảng trang
+declare -a PAGE_TABLE
+echo "Nhập bảng trang (mỗi dòng là frame tương ứng với trang i):"
+for ((i=0; i<NUM_PAGES; i++)); do
+    read -p "Page $i → Frame: " FRAME
+    PAGE_TABLE[$i]=$FRAME
+done
+
+# Hiển thị bảng trang đã nhập
+echo
+echo "Bảng trang:"
+for ((i=0; i<NUM_PAGES; i++)); do
+    echo "Page $i → Frame ${PAGE_TABLE[$i]}"
+done
+
+# Nhập số lượng địa chỉ cần chuyển đổi
+read -p "Nhập số lượng địa chỉ cần chuyển đổi: " NUM_ADDRS
+
+# Chọn chế độ chuyển đổi
+echo
+echo "Bạn muốn chuyển đổi loại nào?"
+echo "1. Địa chỉ logic → vật lý"
+echo "2. Địa chỉ vật lý → logic (giả lập đơn giản)"
+read -p "Lựa chọn (1 hoặc 2): " CHOICE
+
+case $CHOICE in
+    1)
+        MAX_ADDR=$(( NUM_PAGES * PAGE_SIZE - 1 ))
+        echo "Nhập $NUM_ADDRS địa chỉ logic (0 - $MAX_ADDR):"
+        for ((addr_idx=0; addr_idx<NUM_ADDRS; addr_idx++)); do
+            read -p "Địa chỉ logic $((addr_idx + 1)): " LOGIC_ADDR
+            if [ "$LOGIC_ADDR" -ge $((NUM_PAGES * PAGE_SIZE)) ]; then
+                echo "❌ Địa chỉ logic $LOGIC_ADDR vượt quá không gian!"
+                continue
+            fi
+            PAGE_NUM=$(( LOGIC_ADDR / PAGE_SIZE ))
+            OFFSET=$(( LOGIC_ADDR % PAGE_SIZE ))
+            FRAME_NUM=${PAGE_TABLE[$PAGE_NUM]}
+            PHYS_ADDR=$(( FRAME_NUM * PAGE_SIZE + OFFSET ))
+            echo
+            echo " Phân tích địa chỉ logic $LOGIC_ADDR:"
+            echo " → Trang: $PAGE_NUM"
+            echo " → Offset: $OFFSET"
+            echo " → Trang $PAGE_NUM ánh xạ đến Frame $FRAME_NUM"
+            echo " → Địa chỉ vật lý tương ứng: $PHYS_ADDR"
+        done
+        ;;
+    2)
+        echo "Nhập $NUM_ADDRS địa chỉ vật lý:"
+        for ((addr_idx=0; addr_idx<NUM_ADDRS; addr_idx++)); do
+            read -p "Địa chỉ vật lý $((addr_idx + 1)): " PHYS_ADDR
+            FRAME_NUM=$(( PHYS_ADDR / PAGE_SIZE ))
+            OFFSET=$(( PHYS_ADDR % PAGE_SIZE ))
+
+            # Tìm trang ứng với frame (nếu có)
+            PAGE_NUM=-1
+            for ((i=0; i<NUM_PAGES; i++)); do
+                if [ "${PAGE_TABLE[$i]}" -eq "$FRAME_NUM" ]; then 
+                    PAGE_NUM=$i
+                    break
+                fi
+            done
+
+            if [ "$PAGE_NUM" -eq -1 ]; then
+                echo " Không tìm thấy trang nào ánh xạ đến frame $FRAME_NUM"
+                continue
+            fi
+
+            LOGIC_ADDR=$(( PAGE_NUM * PAGE_SIZE + OFFSET ))
+            echo
+            echo " Phân tích địa chỉ vật lý $PHYS_ADDR:"
+            echo " → Frame: $FRAME_NUM"
+            echo " → Offset: $OFFSET"
+            echo " → Frame $FRAME_NUM thuộc về Trang $PAGE_NUM"
+            echo " → Địa chỉ logic tương ứng: $LOGIC_ADDR"
+        done
+        ;;
+    *)
+        echo " Lựa chọn không hợp lệ!"
+        exit 1
+        ;;
+esac
+
+
+
+#!/bin/bash
+
+# Nhập số lượng đoạn
+read -p "Nhập số lượng đoạn: " NUM_SEGMENTS
+
+# Nhập bảng phân đoạn: base và limit
+declare -a BASE
+declare -a LIMIT
+
+echo "Nhập bảng phân đoạn (Limit và Base):"
+for ((i=0; i<NUM_SEGMENTS; i++)); do
+    read -p "Đoạn $i - Limit: " LIMIT[$i]
+    read -p "Đoạn $i - Base: " BASE[$i]
+done
+
+# Hiển thị bảng phân đoạn
+echo
+echo " Bảng phân đoạn:"
+for ((i=0; i<NUM_SEGMENTS; i++)); do
+    echo "Segment $i: Limit = ${LIMIT[$i]}, Base = ${BASE[$i]}"
+done
+
+# Nhập số lượng địa chỉ cần chuyển đổi
+read -p "Nhập số lượng địa chỉ logic cần chuyển đổi: " NUM_ADDRS
+
+# Nhập và xử lý các địa chỉ logic
+echo "Nhập $NUM_ADDRS địa chỉ logic theo dạng segment:offset (VD: 0:430):"
+for ((addr_idx=0; addr_idx<NUM_ADDRS; addr_idx++)); do
+    read -p "Địa chỉ logic $((addr_idx + 1)): " INPUT
+    SEGMENT=$(echo $INPUT | cut -d':' -f1)
+    OFFSET=$(echo $INPUT | cut -d':' -f2)
+
+    # Kiểm tra hợp lệ
+    if [ "$SEGMENT" -ge "$NUM_SEGMENTS" ]; then
+        echo " Segment $SEGMENT không tồn tại!"
+        continue
+    fi
+
+    if [ "$OFFSET" -ge "${LIMIT[$SEGMENT]}" ]; then
+        echo " Offset $OFFSET vượt quá giới hạn đoạn (limit = ${LIMIT[$SEGMENT]})!"
+        continue
+    fi
+
+    # Tính địa chỉ vật lý
+    PHYS_ADDR=$(( ${BASE[$SEGMENT]} + OFFSET ))
+
+    echo
+    echo " Kết quả địa chỉ logic $INPUT:"
+    echo " → Segment: $SEGMENT"
+    echo " → Offset: $OFFSET"
+    echo " → Base = ${BASE[$SEGMENT]}"
+    echo " → Địa chỉ vật lý = ${BASE[$SEGMENT]} + $OFFSET = $PHYS_ADDR"
+done
